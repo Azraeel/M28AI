@@ -12466,7 +12466,13 @@ function ConsiderCoreBaseLandZoneEngineerAssignment(tLZTeamData, iTeam, iPlateau
     --Very High priority factory if we have fewer than 4 (or if lwoer thre number of mexes in the LZ or small map and signif mass stored) and is a smaller map - takes priority over mex expansion; also build more than 4 if dont have low mass and outtech enemy; also if enemy only at T1 and small map then keep building
     iCurPriority = iCurPriority + 1
     if bDebugMessages == true then LOG(sFunctionRef..': Considering if want v.high priority factory builder, mass stored='..M28Team.tTeamData[iTeam][M28Team.subrefiTeamMassStored]..'; bWantMoreFactories='..tostring(bWantMoreFactories)..'; Team gross mass='..M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass]..'; Want air instead of land fac='..tostring(M28Conditions.DoWeWantAirFactoryInsteadOfLandFactory(iTeam, tLZData, tLZTeamData))..'; GameTime='..GetGameTimeSeconds()) end
-    if M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossEnergy] >= 11 and M28Team.tTeamData[iTeam][M28Team.subrefiTeamMassStored] >= 100 and bWantMoreFactories and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 1 and (GetGameTimeSeconds() >= 200 or M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 1.5 * M28Team.tTeamData[iTeam][M28Team.subrefiActiveM28BrainCount] or M28Map.iMapSize <= 256) then
+    --Early game air factory rush - be more aggressive with early air factory construction
+    local bEarlyGameAirFactoryBoost = false
+    if GetGameTimeSeconds() <= 240 and M28Conditions.DoWeWantAirFactoryInsteadOfLandFactory(iTeam, tLZData, tLZTeamData) and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossEnergy] >= 8 and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 0.8 then
+        bEarlyGameAirFactoryBoost = true
+        if bDebugMessages == true then LOG(sFunctionRef..': Early game air factory boost activated') end
+    end
+    if (bEarlyGameAirFactoryBoost and M28Team.tTeamData[iTeam][M28Team.subrefiTeamMassStored] >= 50) or (M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossEnergy] >= 11 and M28Team.tTeamData[iTeam][M28Team.subrefiTeamMassStored] >= 100 and bWantMoreFactories and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 1 and (GetGameTimeSeconds() >= 200 or M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 1.5 * M28Team.tTeamData[iTeam][M28Team.subrefiActiveM28BrainCount] or M28Map.iMapSize <= 256)) then
 
         if iFactoriesInLZ == 0 or not(tFactoriesInLZ) then
             tFactoriesInLZ = EntityCategoryFilterDown(M28UnitInfo.refCategoryFactory, tLZTeamData[M28Map.subreftoLZOrWZAlliedUnits])
@@ -14181,6 +14187,11 @@ function ConsiderCoreBaseLandZoneEngineerAssignment(tLZTeamData, iTeam, iPlateau
     iCurPriority = iCurPriority + 1
     if bWantMoreFactories and (not(bHaveLowMass) or M28Team.tTeamData[iTeam][M28Team.subrefiTeamMassStored] >= 300) and (M28Team.tTeamData[iTeam][M28Team.subrefiHighestEnemyGroundTech] == 1 or M28Team.tTeamData[iTeam][M28Team.subrefiHighestEnemyGroundTech] <= math.min(2, M28Team.tTeamData[iTeam][M28Team.subrefiLowestFriendlyLandFactoryTech])) and M28Team.tTeamData[iTeam][M28Team.subrefiHighestEnemyAirTech] <= 1 and (iFactoriesInLZ == 0 or not(bHaveLowPower and M28Team.tTeamData[iTeam][M28Team.subrefbTeamIsStallingEnergy])) then
         iBPWanted = 20
+        --Early game bonus for air factories
+        if bEarlyGameAirFactoryBoost then 
+            iBPWanted = iBPWanted * 2 
+            if bDebugMessages == true then LOG(sFunctionRef..': Doubled BP for early air factory, new iBPWanted='..iBPWanted) end
+        end
         if M28Conditions.DoWeWantAirFactoryInsteadOfLandFactory(iTeam, tLZData, tLZTeamData) then
             HaveActionToAssign(refActionBuildAirFactory, 1, iBPWanted)
         else
@@ -14992,7 +15003,13 @@ function ConsiderCoreBaseLandZoneEngineerAssignment(tLZTeamData, iTeam, iPlateau
 
     --Air fac and second air fac ahead of land experimental if enemy has significant air to ground threat, for larger maps
     iCurPriority = iCurPriority + 1
-    if M28Map.iMapSize > 512 and (M28Team.tTeamData[iTeam][M28Team.subrefiTotalFactoryCountByType][M28Factory.refiFactoryTypeAir] or 0) < 8 and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 10 + (M28Team.tTeamData[iTeam][M28Team.subrefiTotalFactoryCountByType][M28Factory.refiFactoryTypeAir] or 0) and M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyAirFactoryTech] >= 3 and M28Conditions.WantMoreFactories(iTeam, iPlateau, iLandZone) then
+    local iMaxAirFactoriesForMapSize = 8
+    if M28Map.iMapSize >= 1000 then --20km+ maps
+        iMaxAirFactoriesForMapSize = 16
+    elseif M28Map.iMapSize >= 768 then --15km+ maps 
+        iMaxAirFactoriesForMapSize = 12
+    end
+    if M28Map.iMapSize > 512 and (M28Team.tTeamData[iTeam][M28Team.subrefiTotalFactoryCountByType][M28Factory.refiFactoryTypeAir] or 0) < iMaxAirFactoriesForMapSize and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 10 + (M28Team.tTeamData[iTeam][M28Team.subrefiTotalFactoryCountByType][M28Factory.refiFactoryTypeAir] or 0) and M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyAirFactoryTech] >= 3 and M28Conditions.WantMoreFactories(iTeam, iPlateau, iLandZone) then
         if M28Conditions.DoWeWantAirFactoryInsteadOfLandFactory(iTeam, tLZData, tLZTeamData) then
             iBPWanted = 40
             if not(bHaveLowMass) then iBPWanted = 80 end

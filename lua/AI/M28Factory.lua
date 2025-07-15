@@ -4704,10 +4704,37 @@ function GetBlueprintToBuildForAirFactory(aiBrain, oFactory)
         if ConsiderBuildingCategory(M28UnitInfo.refCategoryBomber) then return sBPIDToBuild end
     end
 
-    --Engineers for start of game (e.g. relevant for if gone first bomber)
+    --Early game interceptor/fighter priority - prioritize air-to-air units in first 15 minutes for better air control
     iCurrentConditionToTry = iCurrentConditionToTry + 1
-    if iFactoryTechLevel == 1 and M28UnitInfo.GetUnitLifetimeCount(oFactory) == 1 and M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryEngineer) < 7 and tLZTeamData[M28Map.subrefTbWantBP] then
-        if bDebugMessages == true then LOG(sFunctionRef..': Will try and get early engi') end
+    if GetGameTimeSeconds() <= 900 and not(bHaveLowPower) then --First 15 minutes
+        local iCurInterceptors = aiBrain:GetCurrentUnits(M28UnitInfo.refCategoryAirAA)
+        local iInterceptorLifetimeCount = M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryAirAA)
+        local iFactoryLifetimeCount = M28UnitInfo.GetUnitLifetimeCount(oFactory)
+        
+        --Build more interceptors if we have few relative to factory output or enemy has air threat
+        local bNeedMoreInterceptors = false
+        if iInterceptorLifetimeCount < iFactoryLifetimeCount * 0.6 and iCurInterceptors < 8 then --Want 60% of production to be interceptors early game
+            bNeedMoreInterceptors = true
+        elseif M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat] > 0 and iCurInterceptors <= 4 then --Always need some defense against air threats
+            bNeedMoreInterceptors = true
+        elseif M28Team.tTeamData[iTeam][M28Team.refiEnemyAirAAThreat] > 0 and iCurInterceptors < M28Team.tTeamData[iTeam][M28Team.refiEnemyAirAAThreat] / 50 + 2 then --Match enemy air-to-air
+            bNeedMoreInterceptors = true
+        elseif GetGameTimeSeconds() <= 300 and iFactoryLifetimeCount >= 2 and iInterceptorLifetimeCount == 0 then --Must have some interceptors by 5 minutes
+            bNeedMoreInterceptors = true
+        end
+        
+        if bDebugMessages == true then LOG(sFunctionRef..': Early game interceptor check: GameTime='..GetGameTimeSeconds()..'; iCurInterceptors='..iCurInterceptors..'; iInterceptorLifetimeCount='..iInterceptorLifetimeCount..'; iFactoryLifetimeCount='..iFactoryLifetimeCount..'; bNeedMoreInterceptors='..tostring(bNeedMoreInterceptors)) end
+        
+        if bNeedMoreInterceptors then
+            if bDebugMessages == true then LOG(sFunctionRef..': Building early game interceptor for air control') end
+            if ConsiderBuildingCategory(M28UnitInfo.refCategoryAirAA) then return sBPIDToBuild end
+        end
+    end
+
+    --Engineers for start of game (reduced priority to favor interceptors) - only after we have some basic air units
+    iCurrentConditionToTry = iCurrentConditionToTry + 1
+    if iFactoryTechLevel == 1 and M28UnitInfo.GetUnitLifetimeCount(oFactory) >= 3 and M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryEngineer) < 4 and M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryAirAA) >= 2 and tLZTeamData[M28Map.subrefTbWantBP] then
+        if bDebugMessages == true then LOG(sFunctionRef..': Will try and get early engi after building some air units') end
         if ConsiderBuildingCategory(M28UnitInfo.refCategoryEngineer) then return sBPIDToBuild end
     end
 
@@ -5114,13 +5141,13 @@ function GetBlueprintToBuildForAirFactory(aiBrain, oFactory)
             if ConsiderBuildingCategory(iBackupAirToGroundCategory) then return sBPIDToBuild end
         end
 
-        --Initial engineers
+        --Initial engineers (reduced priority in early game to favor air-to-air units)
         iCurrentConditionToTry = iCurrentConditionToTry + 1
         if bDebugMessages == true then
             LOG(sFunctionRef .. ': Considering high priority engineers, iFactoryTechLevel=' .. iFactoryTechLevel .. '; Team highest factory tech level=' .. M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyFactoryTech] .. '; Lifetime build count=' .. M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryEngineer * M28UnitInfo.ConvertTechLevelToCategory(iFactoryTechLevel)) .. '; Current units=' .. aiBrain:GetCurrentUnits(M28UnitInfo.refCategoryEngineer * M28UnitInfo.ConvertTechLevelToCategory(iFactoryTechLevel)))
         end
-        if iFactoryTechLevel >= M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyFactoryTech] and tLZTeamData[M28Map.subrefLZbCoreBase] then
-            if M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryEngineer * M28UnitInfo.ConvertTechLevelToCategory(iFactoryTechLevel)) <= 4 or aiBrain:GetCurrentUnits(M28UnitInfo.refCategoryEngineer * M28UnitInfo.ConvertTechLevelToCategory(iFactoryTechLevel)) <= 2 then
+        if iFactoryTechLevel >= M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyFactoryTech] and tLZTeamData[M28Map.subrefLZbCoreBase] and (GetGameTimeSeconds() >= 600 or M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryAirAA) >= 4) then
+            if M28Conditions.GetLifetimeBuildCount(aiBrain, M28UnitInfo.refCategoryEngineer * M28UnitInfo.ConvertTechLevelToCategory(iFactoryTechLevel)) <= 2 or aiBrain:GetCurrentUnits(M28UnitInfo.refCategoryEngineer * M28UnitInfo.ConvertTechLevelToCategory(iFactoryTechLevel)) <= 1 then
                 if ConsiderBuildingCategory(M28UnitInfo.refCategoryEngineer) then return sBPIDToBuild end
             end
         end

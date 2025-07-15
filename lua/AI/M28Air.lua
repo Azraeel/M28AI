@@ -33,8 +33,8 @@ iExtraTicksToWaitBetweenAirCycles = 0 --Set by ConsiderSlowdownForHighUnitCount;
 tbFullAirTeamCycleRun = {} --[x] = iteam, returns true if have run one full cycle
 tbFullAirSubteamCycleRun = {} --[x] = --iSubteam, returns true if have run one full cycle
 tiRecentExpBomberTargets = {} --when an experimental bomber fires, then will trakc here
-iBaseLowHealthThreshold = 0.55
-iProjectileLowHealthThreshold = 0.52 --should always be equal or lower than iBaseLowHealthThreshold
+iBaseLowHealthThreshold = 0.35
+iProjectileLowHealthThreshold = 0.30 --should always be equal or lower than iBaseLowHealthThreshold
 iReclaimWantedForTransportDrop = 250 --i.e. amount of reclaim in amss to consider dropping for even if no mex
 
 --Against units:
@@ -868,7 +868,7 @@ function GetAvailableLowFuelAndInUseAirUnits(iTeam, iAirSubteam, iCategory, bRec
     local tUnitsForRefueling = {}
     local tInUseUnits = {}
     local tSpecialLogicUnits = {}
-    local iLowFuelThreshold = 0.25
+    local iLowFuelThreshold = 0.15
     local iLowHealthThreshold = iProjectileLowHealthThreshold
     if M28Team.tAirSubteamData[iAirSubteam][M28Team.refbOrigRallyOutsidePlayableArea] or M28Team.tTeamData[iTeam][M28Team.refbDontHaveBuildingsOrACUInPlayableArea] then
         local bHaveAirStaging = false
@@ -3120,14 +3120,15 @@ function TargetUnitWithAirAA(oAirAA, oEnemyUnit, iOptionalClosestDist)
             local iOurSpeed = (oAirAA:GetBlueprint().Air.MaxAirspeed or 0)
             local iEnemySpeed = (oEnemyUnit:GetBlueprint().Air.MaxAirspeed or 0)
             if not(oAirAA[M28UnitInfo.refiAARange]) then M28Utilities.ErrorHandler('Have AirAA unit with no AARange, will proceed on assumption it still has an AA attack, UnitId='..oAirAA.UnitId) end
-            if iClosestUnitDist >= 50 and iClosestUnitDist >= 15 + (oAirAA[M28UnitInfo.refiAARange] or 5) and not(EntityCategoryContains(M28UnitInfo.refCategoryAirAA, oEnemyUnit.UnitId)) then
+            --Reduced interception logic - be more aggressive with direct engagement for fighters
+            if iClosestUnitDist >= 80 and iClosestUnitDist >= 25 + (oAirAA[M28UnitInfo.refiAARange] or 5) and not(EntityCategoryContains(M28UnitInfo.refCategoryAirAA, oEnemyUnit.UnitId)) then
                 if bDebugMessages == true then LOG(sFunctionRef..': iOurSpeed='..iOurSpeed..'; iEnemySpeed='..iEnemySpeed) end
-                if iOurSpeed < 8 + iEnemySpeed then
+                if iOurSpeed < 6 + iEnemySpeed then --More restrictive speed check
                     --If enemy has better speed than us then dont consider intercepting unless angles are signif dif
                     local iAngleFromEnemyToUs = M28Utilities.GetAngleFromAToB(oEnemyUnit:GetPosition(), oAirAA:GetPosition())
                     local iEnemyDirection = M28UnitInfo.GetUnitFacingAngle(oEnemyUnit)
                     if bDebugMessages == true then LOG(sFunctionRef..': iAngleFromEnemyToUs='..iAngleFromEnemyToUs..'; iEnemyDirection='..iEnemyDirection..'; Dif='..M28Utilities.GetAngleDifference(iAngleFromEnemyToUs, iEnemyDirection)) end
-                    if iOurSpeed > iEnemySpeed or M28Utilities.GetAngleDifference(iAngleFromEnemyToUs, iEnemyDirection) < 170 then --If 180 then it means we are in the opposite direction to the way the enemy air unit is facing
+                    if iOurSpeed > iEnemySpeed and M28Utilities.GetAngleDifference(iAngleFromEnemyToUs, iEnemyDirection) < 150 then --More restrictive angle and speed requirements
                         --Consider predicting where air unit will move to, and aim for this location
                         local iDistToTravel
                         if iOurSpeed < iEnemySpeed then iDistToTravel = iClosestUnitDist - (oAirAA[M28UnitInfo.refiAARange] or 5)
@@ -3143,11 +3144,16 @@ function TargetUnitWithAirAA(oAirAA, oEnemyUnit, iOptionalClosestDist)
                 end
             end
             if not(bInterceptingDestination) then
-                if iClosestUnitDist and ((iClosestUnitDist >= 120 or EntityCategoryContains(M28UnitInfo.refCategoryCzar, oEnemyUnit.UnitId) or (iClosestUnitDist <= math.max((oAirAA[M28UnitInfo.refiAARange] or 5) + iOurSpeed or 40) and EntityCategoryContains(M28UnitInfo.refCategoryBomber * categories.TECH3 + M28UnitInfo.refCategoryBomber * categories.EXPERIMENTAL + M28UnitInfo.refCategoryTransport, oEnemyUnit.UnitId))) or (iClosestUnitDist <= 5 and EntityCategoryContains(M28UnitInfo.refCategoryGunship, oEnemyUnit.UnitId))
+                --More aggressive attack behavior - prefer direct attack over move orders for fighters
+                if iClosestUnitDist and ((iClosestUnitDist >= 90 or EntityCategoryContains(M28UnitInfo.refCategoryCzar, oEnemyUnit.UnitId) or (iClosestUnitDist <= math.max((oAirAA[M28UnitInfo.refiAARange] or 5) + iOurSpeed or 50) and EntityCategoryContains(M28UnitInfo.refCategoryBomber * categories.TECH3 + M28UnitInfo.refCategoryBomber * categories.EXPERIMENTAL + M28UnitInfo.refCategoryTransport, oEnemyUnit.UnitId))) or (iClosestUnitDist <= 8 and EntityCategoryContains(M28UnitInfo.refCategoryGunship, oEnemyUnit.UnitId))
                         and ((M28UnitInfo.CanSeeUnit(oAirAA:GetAIBrain(), oEnemyUnit)) or oAirAA[M28Orders.reftiLastOrders][1][M28Orders.subrefoOrderUnitTarget] == oEnemyUnit)) then
                     --Note - sometimes get lua error from above re the logic for existing airaa orders; however we are checking oEnemyUnit is a valid unit before calling, and also are checking oAirAA is valid
                     M28Orders.IssueTrackedAttack(oAirAA, oEnemyUnit, false, 'AAAA', false)
                     if bDebugMessages == true then LOG(sFunctionRef..': issued tracked attack') end
+                --For shorter distances, always attack instead of moving to position
+                elseif iClosestUnitDist and iClosestUnitDist <= 60 then
+                    M28Orders.IssueTrackedAttack(oAirAA, oEnemyUnit, false, 'AAAA', false)
+                    if bDebugMessages == true then LOG(sFunctionRef..': Close range - issued direct attack instead of move') end
                 else
                     M28Orders.IssueTrackedMove(oAirAA, oEnemyUnit:GetPosition(), 3, false, 'AAAM', false)
                     if oAirAA[M28Orders.reftiLastOrders][oAirAA[M28Orders.refiOrderCount]] then --if human player with M28 not enabled on the unit this will cause an error otherwise
@@ -5036,11 +5042,9 @@ function EnemyBaseEarlyBomber(oBomber)
                             if bDebugMessages == true then LOG(sFunctionRef..': Targeting enemy units, will consider if want to hover bomb, iClosestDist='..iClosestDist..'; Time since last fired a bomb='..GetGameTimeSeconds() - (oBomber[M28UnitInfo.refiLastBombFired] or 0)..'; iSecondClosestDist='..iSecondClosestDist..'; oNearestEnemy='..(oNearestEnemy.UnitId or 'nil')..(M28UnitInfo.GetUnitLifetimeCount(oNearestEnemy) or 'nil'))
                                 if oNearestEnemy then LOG(sFunctionRef..': Health of oNearestEnemy='..oNearestEnemy:GetHealth()..'; Bomber strike damage='..oBomber[M28UnitInfo.refiStrikeDamage]) end
                             end
-                            --Hover-bomb if we have fired relatively recently
-                            if not(M28Utilities.bLoudModActive) and oNearestEnemy and iClosestDist <= 70 and ((oBomber[M28UnitInfo.refiLastBombFired] and GetGameTimeSeconds() - oBomber[M28UnitInfo.refiLastBombFired] <= 10) or (not(oBomber[M28UnitInfo.refiLastBombFired]) and iClosestDist <= 0 and not(M28UnitInfo.IsUnitValid(oExistingValidAttackTarget)) and oNearestEnemy:GetHealth() <= oBomber[M28UnitInfo.refiStrikeDamage])) and
-                                    (oNearestEnemy:GetHealth() > oBomber[M28UnitInfo.refiStrikeDamage] or (iClosestDist < 50 and iSecondClosestDist < 50) or
-                                            --If fired recently but not really recently then presumably our bomb missed so we want to fire at this target again
-                                            (oBomber[M28UnitInfo.refiLastBombFired] and GetGameTimeSeconds() - oBomber[M28UnitInfo.refiLastBombFired] >= 3)) then
+                            --Hover-bomb only in specific cases - reduced conditions to prevent excessive hovering
+                            if not(M28Utilities.bLoudModActive) and oNearestEnemy and iClosestDist <= 40 and ((oBomber[M28UnitInfo.refiLastBombFired] and GetGameTimeSeconds() - oBomber[M28UnitInfo.refiLastBombFired] <= 3) or (not(oBomber[M28UnitInfo.refiLastBombFired]) and iClosestDist <= 0 and not(M28UnitInfo.IsUnitValid(oExistingValidAttackTarget)) and oNearestEnemy:GetHealth() <= oBomber[M28UnitInfo.refiStrikeDamage])) and
+                                    (oNearestEnemy:GetHealth() > oBomber[M28UnitInfo.refiStrikeDamage] * 1.5 or (iClosestDist < 25 and iSecondClosestDist < 25)) then
                                 --M28Micro.HoverBombTarget(oBomber, oNearestEnemy)
                                 if bDebugMessages == true then LOG(sFunctionRef..': Will call hoverbomb logic to target '..oNearestEnemy.UnitId..M28UnitInfo.GetUnitLifetimeCount(oNearestEnemy)) end
                                 M28Profiler.FunctionProfiler(sFunctionRef, M28Profiler.refProfilerEnd)
@@ -13140,7 +13144,7 @@ function AttackTargetForMexHuntingBomber(oBomber, bCalledFromOnBombFired, oOptio
     if bDebugMessages == true then LOG(sFunctionRef..': Start of code, oBomber='..oBomber.UnitId..M28UnitInfo.GetUnitLifetimeCount(oBomber)..'; bCalledFromOnBombFired='..tostring(bCalledFromOnBombFired)..'; oOptionalTargetOverride='..(oOptionalTargetOverride.UnitId or 'nil')..(M28UnitInfo.GetUnitLifetimeCount(oOptionalTargetOverride) or 'nil')..'; Bomber health%='..M28UnitInfo.GetUnitHealthPercent(oBomber)..'; Bomber fuel%='..oBomber:GetFuelRatio()..'; Does enemy have large air force='..tostring(DoesEnemyHaveASFOrLargeAirForceOrDoWeHaveSnipeTargets(aiBrain) or false)..'; Is special micro active='..tostring(oBomber[M28UnitInfo.refbSpecialMicroActive] or false)..'; Does bomber have a valid target='..tostring(M28UnitInfo.IsUnitValid(oBomber[refoStrikeDamageAssigned]))..'; Nearby enemy AirAA threat='..M28UnitInfo.GetAirThreatLevel(aiBrain:GetUnitsAroundPoint(M28UnitInfo.refCategoryAirAA, oBomber:GetPosition(), 50, 'Enemy'), true, true)..'; Time='..GetGameTimeSeconds()) end
     if oOptionalTargetOverride then
         oTarget = oOptionalTargetOverride
-    elseif bCalledFromOnBombFired and (M28UnitInfo.GetUnitHealthPercent(oBomber) <= 0.55 or oBomber:GetFuelRatio() <= 0.2 or DoesEnemyHaveASFOrLargeAirForceOrDoWeHaveSnipeTargets(aiBrain) or (M28UnitInfo.GetUnitHealthPercent(oBomber) <= 0.75 and M28UnitInfo.GetAirThreatLevel(aiBrain:GetUnitsAroundPoint(M28UnitInfo.refCategoryAirAA, oBomber:GetPosition(), 50, 'Enemy'), true, true) >= 200)) then
+    elseif bCalledFromOnBombFired and (M28UnitInfo.GetUnitHealthPercent(oBomber) <= 0.25 or oBomber:GetFuelRatio() <= 0.1 or DoesEnemyHaveASFOrLargeAirForceOrDoWeHaveSnipeTargets(aiBrain) or (M28UnitInfo.GetUnitHealthPercent(oBomber) <= 0.35 and M28UnitInfo.GetAirThreatLevel(aiBrain:GetUnitsAroundPoint(M28UnitInfo.refCategoryAirAA, oBomber:GetPosition(), 50, 'Enemy'), true, true) >= 400)) then
         if bDebugMessages == true then LOG(sFunctionRef..': Will abort mex hunter logic and retreat') end
         --Abort
         oBomber[refbBomberUsingMexHunterLogic] = false
@@ -13621,9 +13625,9 @@ function EnemyNavalEngineerBomber(oBomber)
                                 local iClosestDist = M28Utilities.GetDistanceBetweenPositions(oBomber:GetPosition(), oEnemyToTarget:GetPosition())
                                 iStrikeDamage = math.max(150, iStrikeDamage) --assume we can 1-shot all engineers in case it gives strange results if we cant
 
-                                --Hover-bomb if we have fired relatively recently
+                                --Hover-bomb only in very close range - reduced conditions to prevent excessive hovering
                                 if bDebugMessages == true then LOG(sFunctionRef..': Deciding whether to hover-bomb, iClosestDist='..iClosestDist) end
-                                if iClosestDist <= 50 and ((oBomber[M28UnitInfo.refiLastBombFired] and GetGameTimeSeconds() - oBomber[M28UnitInfo.refiLastBombFired] <= 10) or (not(oBomber[M28UnitInfo.refiLastBombFired]) and not(M28UnitInfo.IsUnitValid(oExistingValidAttackTarget)) and iClosestDist <= 30)) then
+                                if iClosestDist <= 30 and ((oBomber[M28UnitInfo.refiLastBombFired] and GetGameTimeSeconds() - oBomber[M28UnitInfo.refiLastBombFired] <= 3) or (not(oBomber[M28UnitInfo.refiLastBombFired]) and not(M28UnitInfo.IsUnitValid(oExistingValidAttackTarget)) and iClosestDist <= 15)) then
                                     --M28Micro.HoverBombTarget(oBomber, oNearestEnemy)
                                     if bDebugMessages == true then LOG(sFunctionRef..': Will call hoverbomb logic to target '..oEnemyToTarget.UnitId..M28UnitInfo.GetUnitLifetimeCount(oEnemyToTarget)) end
                                     M28Profiler.FunctionProfiler(sFunctionRef, M28Profiler.refProfilerEnd)
