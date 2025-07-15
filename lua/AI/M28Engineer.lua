@@ -17393,16 +17393,21 @@ function ConsiderMinorLandZoneEngineerAssignment(tLZTeamData, iTeam, iPlateau, i
     if tLZTeamData[M28Map.subrefMexCountByTech][2] + tLZTeamData[M28Map.subrefMexCountByTech][3] >= 1 and not(tLZTeamData[M28Map.subrefbEnemiesInThisOrAdjacentLZ]) and (not(bHaveLowMass) or tLZTeamData[M28Map.subrefMexCountByTech][3] >= 2) and not(bHaveLowPower) then
         --Are we likely on a small island/plateau (due to having at least 50% of the island's mexes)? Or we have significant value here?
         if tLZData[M28Map.subrefLZMexCount] >= 0.5 * M28Map.tAllPlateaus[iPlateau][M28Map.subrefPlateauIslandMexCount][tLZData[M28Map.subrefLZIslandRef]] or tLZTeamData[M28Map.subrefMexCountByTech][3] >= 1 then
-            if M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat] >= 300 then
-                local iAAWanted = math.min(150 * (tLZTeamData[M28Map.subrefMexCountByTech][2] + tLZTeamData[M28Map.subrefMexCountByTech][3] * 4), M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat] * 0.25 + (M28Team.tTeamData[iTeam][M28Team.refiEnemyAirAAThreat] or 0) * 0.05)
-                if not(bHaveLowMass) and not(bHaveLowPower) and tLZTeamData[M28Map.subrefMexCountByTech][3] > 0 and M28Team.tTeamData[iTeam][M28Team.subrefiHighestEnemyAirTech] >= 3 then iAAWanted = math.max(iAAWanted, 1500) end
-                if M28Team.tAirSubteamData[aiBrain.M28AirSubteam][M28Team.refbHaveAirControl] then iAAWanted = iAAWanted * 0.25 end
+            --Lower threshold for AA building when air is contested
+            local iAAThreshold = 200 --Reduced from 300 for more aggressive AA building
+            if not(M28Team.tAirSubteamData[aiBrain.M28AirSubteam][M28Team.refbHaveAirControl]) then
+                iAAThreshold = 100 --Even lower threshold when we don't have air control
+            end
+            if M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat] >= iAAThreshold then
+                local iAAWanted = math.min(200 * (tLZTeamData[M28Map.subrefMexCountByTech][2] + tLZTeamData[M28Map.subrefMexCountByTech][3] * 4), M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat] * 0.35 + (M28Team.tTeamData[iTeam][M28Team.refiEnemyAirAAThreat] or 0) * 0.08) --Increased multipliers
+                if not(bHaveLowMass) and not(bHaveLowPower) and tLZTeamData[M28Map.subrefMexCountByTech][3] > 0 and M28Team.tTeamData[iTeam][M28Team.subrefiHighestEnemyAirTech] >= 3 then iAAWanted = math.max(iAAWanted, 2000) end --Increased from 1500
+                if M28Team.tAirSubteamData[aiBrain.M28AirSubteam][M28Team.refbHaveAirControl] then iAAWanted = iAAWanted * 0.4 end --Reduced reduction from 0.25 to 0.4
                 if bDebugMessages == true then LOG(sFunctionRef..': iAAWanted='..iAAWanted..'; tLZTeamData[M28Map.subrefLZOrWZThreatAllyGroundAA]='..tLZTeamData[M28Map.subrefLZOrWZThreatAllyGroundAA]..'; tLZTeamData[M28Map.subrefMexCountByTech]='..repru(tLZTeamData[M28Map.subrefMexCountByTech])..'; M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat]='..M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat]) end
                 if iAAWanted > tLZTeamData[M28Map.subrefLZOrWZThreatAllyGroundAA] then
                     if tLZTeamData[M28Map.subrefLZOrWZThreatAllyGroundAA] >= 700 then
-                        HaveActionToAssign(refActionBuildAA, M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyFactoryTech], 5)
+                        HaveActionToAssign(refActionBuildAA, M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyFactoryTech], 8) --Increased from 5
                     else
-                        HaveActionToAssign(refActionBuildAA, 1, 5)
+                        HaveActionToAssign(refActionBuildAA, 1, 8) --Increased from 5
                     end
                 end
             end
@@ -18709,16 +18714,16 @@ function ConsiderWaterZoneEngineerAssignment(tWZTeamData, iTeam, iPond, iWaterZo
     --Preemptive AA builder if we are at T3 and have decent mass income, and have friendly units in the WZ or intel coverage, and no enemy units
     iCurPriority = iCurPriority + 1
     if not(tWZTeamData[M28Map.subrefWZTimeLastDestroyedForStuckNavy]) and not (bHaveLowMass) and not (bHaveLowPower) and (M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyNavalFactoryTech] or 1) >= 3 and M28Team.tTeamData[iTeam][M28Team.subrefiTeamGrossMass] >= 10 then
-        --Build AA if we have <1.5k AA threat
-        local iAAThreatWanted = 1500
+        --Build AA if we have <2.5k AA threat (increased from 1.5k for better coverage)
+        local iAAThreatWanted = 2500
         if tWZTeamData[M28Map.subrefWZbCoreBase] or tWZTeamData[M28Map.subrefWZbContainsUnderwaterStart] then
-            iAAThreatWanted = 3000
+            iAAThreatWanted = 4500
         end
         if tWZTeamData[M28Map.subrefLZOrWZThreatAllyGroundAA] < iAAThreatWanted then
             if M28Utilities.IsTableEmpty(tWZTeamData[M28Map.subrefTEnemyUnits]) and ((tWZTeamData[M28Map.refiSonarCoverage] or 0) > 20 or M28Utilities.IsTableEmpty(tWZTeamData[M28Map.subreftoLZOrWZAlliedUnits]) == false) then
-                iBPWanted = 50
+                iBPWanted = 75 --Increased from 50 for more aggressive AA building
                 if tWZTeamData[M28Map.subrefbEnemiesInThisOrAdjacentWZ] then
-                    iBPWanted = 25
+                    iBPWanted = 40 --Increased from 25
                 end
                 local iTechLevelWanted = math.max(2, (M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyNavalFactoryTech] or 1) - 1)
                 if M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyNavalFactoryTech] >= 3 and (tWZTeamData[M28Map.subrefLZOrWZThreatAllyGroundAA] or 0) - (tWZTeamData[M28Map.subrefWZThreatAlliedMAA] or 0) >= 800 then iTechLevelWanted = M28Team.tTeamData[iTeam][M28Team.subrefiHighestFriendlyNavalFactoryTech] end

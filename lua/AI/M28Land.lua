@@ -3026,6 +3026,41 @@ function ManageMAAInLandZone(tLZData, tLZTeamData, iTeam, iPlateau, iLandZone, t
     local sFunctionRef = 'ManageMAAInLandZone'
     M28Profiler.FunctionProfiler(sFunctionRef, M28Profiler.refProfilerStart)
 
+    --Ensure land units stay near AA protection when air is contested
+    if not(M28Team.tAirSubteamData[aiBrain.M28AirSubteam][M28Team.refbHaveAirControl]) and tLZTeamData[M28Map.refiEnemyAirToGroundThreat] > 0 then
+        local tLandUnitsInZone = EntityCategoryFilterDown(M28UnitInfo.refCategoryLandCombat - M28UnitInfo.refCategoryMAA, tLZTeamData[M28Map.subreftoLZOrWZAlliedUnits])
+        local tAAUnitsInZone = EntityCategoryFilterDown(M28UnitInfo.refCategoryMAA + M28UnitInfo.refCategoryStructureAA, tLZTeamData[M28Map.subreftoLZOrWZAlliedUnits])
+        
+        if not(M28Utilities.IsTableEmpty(tLandUnitsInZone)) and not(M28Utilities.IsTableEmpty(tAAUnitsInZone)) then
+            --Find the closest AA unit to each land unit and ensure they stay within protection range
+            for iUnit, oUnit in tLandUnitsInZone do
+                if M28UnitInfo.IsUnitValid(oUnit) and not(oUnit[M28UnitInfo.refbSpecialMicroActive]) then
+                    local oClosestAA = nil
+                    local iClosestAADist = 100000
+                    
+                    for iAA, oAA in tAAUnitsInZone do
+                        if M28UnitInfo.IsUnitValid(oAA) then
+                            local iDist = M28Utilities.GetDistanceBetweenPositions(oUnit:GetPosition(), oAA:GetPosition())
+                            if iDist < iClosestAADist then
+                                iClosestAADist = iDist
+                                oClosestAA = oAA
+                            end
+                        end
+                    end
+                    
+                    --If land unit is too far from AA protection, move it closer
+                    if oClosestAA and iClosestAADist > 50 then --50 unit protection radius
+                        local tMovePoint = M28Utilities.MoveInDirection(oClosestAA:GetPosition(), M28Utilities.GetAngleFromAToB(oClosestAA:GetPosition(), oUnit:GetPosition()), 30, true, false, M28Map.bIsCampaignMap)
+                        if tMovePoint then
+                            M28Orders.IssueTrackedMove(oUnit, tMovePoint, 4, false, 'AAProt', false)
+                            if bDebugMessages == true then LOG(sFunctionRef..': Moving land unit '..oUnit.UnitId..' closer to AA protection, dist='..iClosestAADist) end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     local tRallyPoint = GetNearestLandRallyPoint(tLZData, iTeam, iPlateau, iLandZone, 2) --Get a LZ up to 3 land zones away to retreat to (i.e. will pick rally point and then move 2 towards it)
     local tAmphibiousRallyPoint = GetNearestLandRallyPoint(tLZData, iTeam, iPlateau, iLandZone, 2, true)
     local bRetreatWithAllMAA = false

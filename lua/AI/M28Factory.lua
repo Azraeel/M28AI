@@ -651,11 +651,15 @@ function AdjustBlueprintForOverrides(aiBrain, oFactory, sBPIDToBuild, tLZTeamDat
                 end
             end
         end
-        --Cap MAA levels
+        --Cap MAA levels - increased limits for contested air
         if sBPIDToBuild and EntityCategoryContains(M28UnitInfo.refCategoryMAA - categories.TECH3, sBPIDToBuild) then
-            local iMaxT1AndT2MAA = 200
+            local iMaxT1AndT2MAA = 300 --Increased from 200 for better AA coverage
             if M28Team.tAirSubteamData[aiBrain.M28AirSubteam][M28Team.refbHaveAirControl] then
-                iMaxT1AndT2MAA = 100
+                iMaxT1AndT2MAA = 150 --Increased from 100
+            end
+            --Further increase if air is contested
+            if not(M28Team.tAirSubteamData[aiBrain.M28AirSubteam][M28Team.refbHaveAirControl]) and M28Team.tTeamData[iTeam][M28Team.refiEnemyAirToGroundThreat] > 0 then
+                iMaxT1AndT2MAA = iMaxT1AndT2MAA * 1.5
             end
             if aiBrain:GetCurrentUnits(M28UnitInfo.refCategoryMAA) >= iMaxT1AndT2MAA then
                 --Ignore if enemy has air to ground threat in this zone
